@@ -1,30 +1,13 @@
 var User = require('../models/user');
 var Recruiter = require('../models/recruiter');
-var Profile  = require('../models/profile');
 var jwt = require('jwt-simple');
 var moment = require('moment');
-var passport = require('passport');
-var passport_facebook = require('passport-facebook').Strategy;
-var passport_linkedin = require('passport-linkedin');
-FacebookStrategy = require('passport-facebook').Strategy;
-const {google} = require('googleapis');
 const bcrypt = require('bcrypt');
-var multer = require('multer');
-var statusCodes = require('./statusCodes');
 var fs = require('fs');
-const googleConfig = {
-    clientID: '539355564298-0lfascp1af43b79cks4tt6mdr2ers4h6.apps.googleusercontent.com',
-    clientSecret: 'wop5c2pCtr4M8Q3MJSwvRj_9',
-    redirect: 'http://localhost:5000/api/google/login/redirect'
-}
-
-const defaultScope = [
-    'https://www.googleapis.com/auth/plus.me',
-    'https://www.googleapis.com/auth/userinfo.email',
-];
-
+var mongoose = require('mongoose');
+var conn = mongoose.connection;
 var nodemailer = require('nodemailer');
-
+var Form = require('../models/form');
 var smtpTransport = nodemailer.createTransport({
     service: "Gmail",
     auth:{
@@ -69,53 +52,6 @@ function sendEmailVerificationLink(host, user, hash){
                     console.log("Message sent: "+res.message);
                 }   
             });
-}
-
-function createConnection(){
-    return new google.auth.OAuth2(
-        googleConfig.clientID,
-        googleConfig.clientSecret,
-        googleConfig.redirect
-    );
-}
-
-function getConnectionUrl(auth){
-    return auth.generateAuthUrl({
-        access_type:'offline',
-        prompt: 'consent',
-        scope: defaultScope
-    });
-}
-
-function getGooglePlusApi(auth){
-    return google.plus({version:'v1',auth});
-}
-
-function createUrl(){
-    const auth = createConnection();
-    const url = getConnectionUrl(auth);
-    return url;
-}
-
-async function  getAccountDetails(code){
-    try{
-        const auth = createConnection();
-        const data = await auth.getToken(code);
-        const token = data.tokens;
-        auth.setCredentials(token);
-        const plus = getGooglePlusApi(auth);
-        const user = await plus.people.get({userId:'me'});
-        const googleUserId = user.data.id;
-        const googleUserEmail = user.data.emails && user.data.emails.length && user.data.emails[0].value;
-        return{
-            id:googleUserId,
-            email: googleUserEmail,
-            tokens: token,
-        };
-    }catch(err){
-        console.log(err);
-    }
-
 }
 
 function validateRegisterParams(data){
@@ -194,7 +130,7 @@ module.exports= {
                 return;
             }
         }
-    },
+    },  
 
     getProfile: function(req, res){
         console.log("Get Profile Details of User");
@@ -209,184 +145,66 @@ module.exports= {
         });
     },
 
-    profileImageUpload: function(req, res){
-        var profile = new Profile();
-        var image = fs.readFileSync(req.files.userImage.path);
-        var encode_image = image.toString('base64');
-        profile.image.data = new Buffer(encode_image, 'base64');WWW
-        profile.image.contentType = req.file.mimetype; 
-
-        Profile.findOneAndUpdate({Email: req.body.email, image: profile.image}, function(err, profile){
-            if(err){
-                console.log('Profile Image Upload failed: '+err);
-                res.status(statusCodes.Denied).status('message: Failed to update profile Iamge, Try Again Later.');
-            }
-            else{
-                console.log('profile Image update success '+profile);
-                res.status(statusCodes.success),status('message: Profile Image Updated successfully');
-            }
+  uploadFormDetails: function(req, res){
+    console.log("Upload form details");
+    console.log("Formdata: "+req.body.formdata);
+    console.log("id: "+req.body.formid);
+    var input = JSON.parse(req.body.formdata);
+    var id = req.body.formid;
+    var result = validateFormData(input, id);
+    if(result){
+        const collection = conn.collection('FormCollection');
+        var formdata = new Form({
+            _id: id,
+            formdata: input
         });
-    },
-
-    login: function (req, res) {
-        console.log(req.body.email);
-        User.findOne({Email: req.body.email}, function(err, user){
-           if(!user){
-               Recruiter.findOne({Email: req.body.email}, function(err, recruiter){
-                if(!recruiter){
-                    console.log("Invalid Email or password");
-                    return res.status(401).send({message: "Email or Password Invalid"});
-                }else{
-                    validatePassword(req, recruiter, res);
-                   }
-               });
-           }else{
-            validatePassword(req, user, res);
-           }
-        });
-    },
-
-    validateEmailLink: function(req, res){
-        console.log(req.protocol + "://" +req.get('host'));
-        if((req.protocol + "://" + req.get('host')) == ("http://recruit-apiservices.herokuapp.com")){
-            console.log("Domain is matched. Request is from authentic email");
-                var user = new User(
-                    {
-                        Active: true
-                    }                      
-                );
-                User.findOneAndUpdate({EmailHash:req.query.id},  { $set: { Active: true }}, {runValidators:true},
-                function(err, user){
-                    if(!err){
-                        if(user!=null){
-                            console.log("Email is verified successfully");
-                            res.end("<h1>Email " + user.Email + " is verified successfully");
-                        }else{
-                            console.log("Email not found in database");
-                            res.end("<h1>Email not found in database</h1>");
-                        }
-                    }else{
-                        res.end("<h1>Failed to verify Email. Try again");
-                    }
-                });
+       collection.insert(formdata, function(err, result){
+            if(err || result==null){
+                res.status(401).send({success:false, message:"Failed to Store Form data"});
             }else{
-                console.log("Failed to verify Email");
-                res.end("<h1>Bad Request. Try again</h1>");
+                res.status(200).send({success:true, message:"Successfully Stored Form Data"});
             }
-    },
-
-    facebookLogin : function(req,res){
-        passport.use(new FacebookStrategy({
-            clientID:"912201792307025",
-            clientSecret:"",
-            callbackURL:"",
-            profileFields: ['id', 'displayName', 'email']
-        },
-        function(accessToken, refreshToken, profile, cb){
-            User.findOne({email: profile._json.email}).select('name password email').exec(function(err, user){
-                if(err){
-                    cb(err);
-                }
-                if(user && user!=null){
-                    cb(null,user);
-                }else{
-                    cb(err);
-                }
-            });
-            console.log(profile);
-            return cb(null, profile);
-        }));
-        passport.serializeUser(function(user,cb){
-            token = createToken(user);
-            cb(null,user.id);
         });
-        passport.deserializeUser(function(obj,cb){
-            cb(null,obj);
-        });
-        passport.authenticate('facebook');
-    },
-
-    facebook: function(req, res){
-        passport.use(new passport_facebook({
-            clientID:"",
-            clientSecret:"",
-            callbackURL:""
-        },
-        function(accessToken, refreshToken, profile, cb){
-            User.findOrCreate({facebookId: profile.id}, function(err,user){
-                return cb(err,user);
-            })
-        }));
-        passport.serializeUser(function(user,cb){
-            cb(null,user);
-        });
-        passport.deserializeUser(function(obj,cb){
-            cb(null,obj);
-        });
-    },
-
-    google: function(req, res){
-        // passport.use(new passport_google({
-        //     clientID: "827184650329-aurntqn7t2djnbv8e2m05jhtqb4vfeed.apps.googleusercontent.com",
-        //     clientSecret:"nFmjopJDMDmqkLsF60qiWT7G",
-        //     callbackURL:""
-        // },
-        // function(accessToken, refreshToken, profile, cb){
-        //     User.findOrCreate({facebookId: profile.id}, function(err,user){
-        //         return cb(err,user);
-        //     })
-        // }));
-        // passport.serializeUser(function(user,cb){
-        //     cb(null,user);
-        // });
-        // passport.deserializeUser(function(obj,cb){
-        //     cb(null,obj);
-        // });
-        var url = createUrl();
-        console.log(url);
-    },
-
-    googleLoginRedirect : function(req, res){
-        var code= req.query.code;
-        console.log(code);
-        if(code!=null){
-            var user = getAccountDetails(code);
-            if(user.email!=null){
-                User.findOne({email: user.email}).select('name email').exec(function(err, user){
-                    if(err){
-                        res.status(401).send({succes:false,message:'User email not found'});
-                    }
-                    res.status(200).send({succes:true,message:'Successfully Authenticated',data:user});
-                });
-            }
-            else{
-                res.status(401).send({success:false,message:'Failed to verify google Authentication. Try again'});
-            }
-
-        }else{
-            res.status(401).send({success:false,message:'Failed to getAccountDetails'});
-        }
-    },
-
-    linkedin: function(req, res){
-        passport.use(new passport_linkedin({
-            clientID:"81u0oh0mys638l",
-            clientSecret:"wDjHTNB4rzMtzQJv",
-            callbackURL:""
-        },
-        function(accessToken, refreshToken, profile, cb){
-            User.findOrCreate({facebookId: profile.id}, function(err,user){
-                return cb(err,user);
-            })
-        }));
-        passport.serializeUser(function(user,cb){
-            cb(null,user);
-        });
-        passport.deserializeUser(function(obj,cb){
-            cb(null,obj);
-        });
+    }else{
+        res.status(401).send({success:true, message: "Formdata is not in correct format"});
     }
+  },
+
+  retrieveFormDetails: function(req, res){
+    console.log("Retreive Form Details for id : "+req.query.id);
+    if(validateFormId(req.query.id)){
+        const collection = conn.collection('FormCollection');
+        collection.findOne({_id:req.query.id}, 'formdata', function(err, result){
+            if(err || result==null){
+                res.status(401).send({success:false, message:"Failed to retreive Form data"});
+            }else{
+                var data = JSON.stringify(result.formdata);
+                console.log("Result : "+data);
+                res.status(200).send({success:true, message:data });
+            }
+        });
+    }else{
+        res.status(401).send({success:true, message: "Form Id is not available"});
+    }
+  }
+
 };
+
+function validateFormId(id){
+    if(id!=null && id!=''){
+        return true;
+    }else{
+        return false;
+    }
+}
+
+function validateFormData(input, id){
+    if(input!=null && input!='' && id!=null && id!=''){
+        return true;
+    }else{
+        return false;
+    }
+}
 
 function createToken(user){
     var payload = {
