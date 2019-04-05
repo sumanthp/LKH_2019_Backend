@@ -8,6 +8,7 @@ var mongoose = require('mongoose');
 var conn = mongoose.connection;
 var nodemailer = require('nodemailer');
 var Form = require('../models/form');
+const uuidv1 = require('uuid/v1');
 var smtpTransport = nodemailer.createTransport({
     service: "Gmail",
     auth:{
@@ -171,16 +172,18 @@ module.exports= {
   },
 
   retrieveFormDetails: function(req, res){
+    var uuid = uuidv1();
+    console.log("Unique Id Generated: "+uuid);
     console.log("Retreive Form Details for id : "+req.query.id);
     if(validateFormId(req.query.id)){
         const collection = conn.collection('FormCollection');
         collection.findOne({_id:req.query.id}, 'formdata', function(err, result){
-            if(err || result==null){
+            if(err || result==null || uuid==null){
                 res.status(401).send({success:false, message:"Failed to retreive Form data"});
             }else{
                 var data = JSON.stringify(result.formdata);
                 console.log("Result : "+data);
-                res.status(200).send({success:true, message:data });
+                res.status(200).send({success:true, message:data, id:uuid});
             }
         });
     }else{
