@@ -8,6 +8,7 @@ var mongoose = require('mongoose');
 var conn = mongoose.connection;
 var nodemailer = require('nodemailer');
 var Form = require('../models/form');
+var VoiceCaptcha = require('../models/voicecaptcha');
 const uuidv1 = require('uuid/v1');
 var smtpTransport = nodemailer.createTransport({
     service: "Gmail",
@@ -189,9 +190,57 @@ module.exports= {
     }else{
         res.status(401).send({success:true, message: "Form Id is not available"});
     }
+  },
+
+  storeVoiceCaptchaWords: function(req, res){
+    var uid = req.body.id;
+    var words = req.body.words;
+    console.log("UID: " +uid);
+    console.log("words: "+words);
+    if(validateVoiceCaptchaParams(uid, words)){
+        const collection = conn.collection('VoiceCaptcha');
+        var voiceCaptchadata = new VoiceCaptcha({
+            _id: uid,
+            data: words
+        });
+        collection.insert(voiceCaptchadata, function(err, result){
+            if(err || result==null){
+                res.status(401).send({success:false, message:"Failed to Store voice captch data"});
+            }else{
+                res.status(200).send({success:true, message:"Successfully Stored voice captcha Data"});
+            }
+        });
+    }else{
+        res.status(401).send({success:true, message: "Invalid Input parameters"});
+    }
+  },
+
+  retrieveVoiceCaptchaWords: function(req, res){
+      var uid = req.query.id;
+      if(uid!=null & uid!=''){
+        const collection = conn.collection('VoiceCaptcha');
+        collection.findOne({_id:uid}, 'data', function(err, result){
+            if(err || result==null){
+                res.status(401).send({success:false, message:"Failed to retrieve voice captch data"});
+            }else{
+                console.log("Words: "+result.data);
+                res.status(200).send({success:true, message:result.data});
+            }
+        })
+      }else{
+        res.status(401).send({success:true, message: "Invalid Input parameters"});
+      }
   }
 
 };
+
+function validateVoiceCaptchaParams(uid, words){
+    if(uid!=null && words!=null && words!=''&& uid!=''){
+        return true;
+    }else{
+        return false;
+    }
+}
 
 function validateFormId(id){
     if(id!=null && id!=''){

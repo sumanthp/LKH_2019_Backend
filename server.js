@@ -25,9 +25,10 @@ app.use(function(req,res,next){
    res.setHeader('Access-Control-Allow-Credentials', true);
    next();
 });
-
 app.route('/api/create').post(auth.uploadFormDetails);
 app.route('/api/retrieve').get(auth.retrieveFormDetails);
+app.route('/api/storeWords').post(auth.storeVoiceCaptchaWords);
+app.route('/api/retrieveWords').get(auth.retrieveVoiceCaptchaWords);
 var server = app.listen((process.env.PORT || port), function (req, res) {
     console.log("Listening on port",server.address().port);
 });
