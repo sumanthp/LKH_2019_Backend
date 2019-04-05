@@ -149,7 +149,7 @@ module.exports= {
 
   uploadFormDetails: function(req, res){
     console.log("Upload form details");
-    console.log("Formdata: "+req.body.formdata);
+    console.log("Formdata: "+ JSON.parse(req.body.formdata));
     console.log("id: "+req.body.formid);
     var input = req.body.formdata;
     var id = req.body.formid;
@@ -160,7 +160,7 @@ module.exports= {
             _id: id,
             formdata: input
         });
-       collection.insert(formdata, function(err, result){
+       collection.insertOne(formdata, function(err, result){
             if(err || result==null){
                 res.status(401).send({success:false, message:"Failed to Store Form data"});
             }else{
@@ -182,7 +182,7 @@ module.exports= {
             if(err || result==null || uuid==null){
                 res.status(401).send({success:false, message:"Failed to retreive Form data"});
             }else{
-                var data = JSON.stringify(result.formdata);
+                var data = JSON.parse(result.formdata);
                 console.log("Result : "+data);
                 res.status(200).send({success:true, message:data, id:uuid});
             }
@@ -203,7 +203,7 @@ module.exports= {
             _id: uid,
             data: words
         });
-        collection.insert(voiceCaptchadata, function(err, result){
+        collection.insertOne(voiceCaptchadata, function(err, result){
             if(err || result==null){
                 res.status(401).send({success:false, message:"Failed to Store voice captch data"});
             }else{
