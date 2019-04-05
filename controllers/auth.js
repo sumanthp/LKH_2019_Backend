@@ -151,7 +151,7 @@ module.exports= {
     console.log("Upload form details");
     console.log("Formdata: "+req.body.formdata);
     console.log("id: "+req.body.formid);
-    var input = JSON.parse(req.body.formdata);
+    var input = req.body.formdata;
     var id = req.body.formid;
     var result = validateFormData(input, id);
     if(result){
