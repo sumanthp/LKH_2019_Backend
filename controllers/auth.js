@@ -164,7 +164,7 @@ module.exports= {
             if(err || result==null){
                 res.status(401).send({success:false, message:"Failed to Store Form data"});
             }else{
-                var url = req.protocol + "://" + req.get('host') + req.url+"?id="+id;
+                var url = req.protocol + "://" + req.get('host') + "/api/retrieve?id="+id;
                 console.log(url);
                 res.status(200).send({success:true, message:"Successfully Stored Form Data", url:url});
             }
